@@ -4,10 +4,10 @@ const server = require('http').Server(app)
 const io = require('socket.io')(server)
 const wordGenerator = require('./wordGenerator')
 
-app.get('/', (req, res) => {
-  res.sendFile(__dirname + '/index.html')
-})
-
+/**
+Create a hashmap to hold all the different multiplayer rooms. the key is the name of the room the value is the room object.
+using a map instead of a regular object since its easier to delete things and get an iterable with a map instead of a regular js object
+*/
 let rooms = new Map()
 
 io.on('connection', socket => {
@@ -18,16 +18,16 @@ io.on('connection', socket => {
   //Start a single player game.
   socket.on('start_single', () => socket.emit('first_word', wordGenerator()))
 
-  //Check that the player typed the right word in
+  //Check that the player typed the right word in, if they did then send them a new word and their prize
   socket.on('check_word', data => {
     console.log(data)
     if(data.answer === data.currWord) {
       socket.emit('new_word', {newWord: wordGenerator(), reduction: data.currWord.length/2})
       if(!data.isMultiplayer) {
-        socket.emit('update_score', 1)
+        socket.emit('update_score', 1) //only need to update the score if its a single player game
       }
     } else {
-      socket.emit('penalty')
+      socket.emit('penalty') //penalized the player for getting the word wrong. #toughlove
     }
   })
 
@@ -62,14 +62,17 @@ io.on('connection', socket => {
     }
   })
 
+  //Remove the client from the room, then perform some clean up.
   socket.on('leave', room => {
     socket.leave(room)
     console.log(`${socket.id} left ${room}`)
 
     if(rooms.get(room) !== undefined && rooms.get(room).intervalID) {
       clearInterval(rooms.get(room).intervalID)
+      //using Object.assign as a poormans object spread.
       rooms.set(room, Object.assign({}, rooms.get(room), {intervalID: null}))
     } else {
+      //if you're the last one to leave the room, then burn it to the ground.
       rooms.delete(room)
     }
   })
@@ -78,7 +81,7 @@ io.on('connection', socket => {
   socket.on('start_multiplayer', () => {
     console.log(`Starting multiplayer session for ${socket.id}`)
     //if there is space in a room that already exists, join that room. otherwise, create a new room, join it, wait for another player.
-    let entries = [...rooms.entries()]
+    let entries = [...rooms.entries()] //creating an array out of an iterable.
 
     let hasRoom = entries.findIndex(room => typeof room[1].player2 !== "string")
     if(hasRoom !== -1) {
@@ -102,11 +105,13 @@ io.on('connection', socket => {
     }
   })
 
+  //send the updated timer information to your opponent so they see your timer.
   socket.on('trigger_update_opponent_timer', data => io.to(data.to).emit('update_opponent_timer', data.newTime))
 
+  //If a client disconnects, then we remove them from all rooms they're a part of (should be at most 1), perform some cleanup,  and tell the other players in this room that the game is over cause of a leaver.
   socket.on('disconnect', (data) => {
     console.log(`${socket.id} disconnected. Removing all rooms with ${socket.id}`)
-    let entries = [...rooms.entries()]
+    let entries = [...rooms.entries()] //Creating an array out of an iterable.
     entries.forEach(elem => {
       if(elem[1].player1 === socket.id || elem[1].player2 === socket.id) {
         socket.leave(elem[1].name)
@@ -120,4 +125,5 @@ io.on('connection', socket => {
   })
 })
 
+//Listen on port 8000
 server.listen(8000)
