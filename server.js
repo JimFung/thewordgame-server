@@ -11,7 +11,7 @@ app.get('/', (req, res) => {
 let rooms = new Map()
 
 io.on('connection', socket => {
-  console.log(`client connected...\nsocket id:${socket.id}`)
+  console.log(`client connected. socket id:${socket.id}`)
 
   //Singleplayer logic
 
@@ -64,7 +64,7 @@ io.on('connection', socket => {
 
   socket.on('leave', room => {
     socket.leave(room)
-    console.log(`someone left ${room}`)
+    console.log(`${socket.id} left ${room}`)
 
     if(rooms.get(room) !== undefined && rooms.get(room).intervalID) {
       clearInterval(rooms.get(room).intervalID)
